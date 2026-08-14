@@ -25,17 +25,10 @@ export const api = {
   importCourses: (groups: { name: string; professors: string[] }[]) =>
     request("/api/courses/import", { method: "POST", body: JSON.stringify({ groups }) }),
 
-  vote: (studentId: string, courseId: string, professorId: string) =>
-    request("/api/vote", { method: "POST", body: JSON.stringify({ studentId, courseId, professorId }) }),
-  getResults: (studentId: string) => request(`/api/results?studentId=${encodeURIComponent(studentId)}`),
+  vote: (courseId: string, professorId: string) =>
+    request("/api/vote", { method: "POST", body: JSON.stringify({ courseId, professorId }) }),
+  getResults: (peek: boolean) => request(`/api/results${peek ? "?peek=1" : ""}`),
   getAdminResults: () => request("/api/admin/results"),
-
-  getRosterConfig: () => request("/api/roster/config"),
-  setRosterConfig: (mode: string, minLen: number, maxLen: number) =>
-    request("/api/roster/config", { method: "POST", body: JSON.stringify({ mode, minLen, maxLen }) }),
-  getRoster: () => request("/api/roster"),
-  addRosterIds: (ids: string[]) => request("/api/roster", { method: "POST", body: JSON.stringify({ ids }) }),
-  clearRoster: () => request("/api/roster", { method: "DELETE" }),
 
   adminLogin: (password: string) => request("/api/admin/login", { method: "POST", body: JSON.stringify({ password }) }),
   adminLogout: () => request("/api/admin/logout", { method: "POST" }),

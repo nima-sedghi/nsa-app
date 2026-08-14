@@ -14,13 +14,15 @@ export const professors = pgTable("professors", {
   name: text("name").notNull(),
 });
 
-// The unique index on (studentId, courseId) is what actually stops double voting —
-// enforced by Postgres itself, not by client-side JS that a bad-faith user could edit.
+// voterId is a random UUID the server assigns to each browser on first visit (via an
+// httpOnly cookie set in middleware.ts) — not a typed student number. The unique index
+// on (voterId, courseId) is what actually stops double voting, enforced by Postgres
+// itself: a second vote from the same browser updates their row instead of adding one.
 export const votes = pgTable(
   "votes",
   {
     id: text("id").primaryKey(),
-    studentId: text("student_id").notNull(),
+    voterId: text("voter_id").notNull(),
     courseId: text("course_id")
       .notNull()
       .references(() => courses.id, { onDelete: "cascade" }),
@@ -31,25 +33,11 @@ export const votes = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => ({
-    uniqStudentCourse: uniqueIndex("uniq_student_course").on(t.studentId, t.courseId),
+    uniqVoterCourse: uniqueIndex("uniq_voter_course").on(t.voterId, t.courseId),
   })
 );
 
-export const allowedStudents = pgTable("allowed_students", {
-  id: text("id").primaryKey(),
-  studentId: text("student_id").notNull().unique(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const rosterConfig = pgTable("roster_config", {
-  id: integer("id").primaryKey(),
-  mode: text("mode").notNull().default("open"),
-  minLen: integer("min_len").notNull().default(8),
-  maxLen: integer("max_len").notNull().default(10),
-});
-
-// DB-backed rate limiting so it works correctly across serverless function instances
-// (an in-memory counter would reset per cold start and wouldn't share state).
+// DB-backed rate limiting so it works correctly across serverless function instances.
 export const rateLimitBuckets = pgTable("rate_limit_buckets", {
   id: text("id").primaryKey(), // `${key}:${windowStartMs}`
   windowStart: timestamp("window_start").notNull(),

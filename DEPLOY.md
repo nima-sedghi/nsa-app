@@ -23,7 +23,9 @@ npm install
 npm run hash-password
 ```
 
-رمزی که می‌خوای رو وارد کن، یه خط مثل این می‌گیری:
+رمزی که می‌خوای رو وارد کن. دو نسخه بهت میده — یکی برای Vercel، یکی برای فایل `.env` محلی (فرقشون همینه که تو نسخه‌ی `.env` هر `$` با `\$` جایگزین شده، وگرنه Next.js موقع خوندن فایل `.env` رو `$` رو نشونه‌ی متغیر می‌گیره و هش رو خراب می‌کنه — این تو Vercel مشکلی نیست، فقط تو فایل `.env` محلی باید حواست باشه).
+
+یه خط مثل این می‌گیری:
 ```
 ADMIN_PASSWORD_HASH=$2a$12$....
 ```
@@ -40,7 +42,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 تو همون پوشه‌ی پروژه، یه فایل `.env` بساز:
 ```
 DATABASE_URL=همون رشته‌ای که از Neon گرفتی
-ADMIN_PASSWORD_HASH=همون هشی که ساختی
+ADMIN_PASSWORD_HASH=نسخه‌ی \$-دار (مخصوص .env) که تو قدم ۲ گرفتی
 ADMIN_SESSION_SECRET=همون رشته‌ی تصادفی
 ```
 
@@ -55,7 +57,7 @@ npm run db:push
 1. کد رو تو یه ریپازیتوری GitHub بذار (اگه گیت نداری: `git init && git add . && git commit -m "init"` بعد یه ریپو خالی تو گیت‌هاب بساز و پوشش بده).
 2. برو به [vercel.com](https://vercel.com)، با گیت‌هاب لاگین کن.
 3. **Add New Project** → ریپازیتوری‌ت رو انتخاب کن → Import.
-4. قبل از زدن Deploy، برو تو بخش **Environment Variables** و همون سه‌تا متغیر بالا رو دقیقاً با همون اسم اضافه کن:
+4. قبل از زدن Deploy، برو تو بخش **Environment Variables** و این سه‌تا رو دقیقاً با همون اسم اضافه کن (برای `ADMIN_PASSWORD_HASH` همون نسخه‌ی *بدون* `\$` رو بذار، یعنی نسخه‌ی اول که تو قدم ۲ گرفتی — اینجا مشکل escape کردن وجود نداره):
    - `DATABASE_URL`
    - `ADMIN_PASSWORD_HASH`
    - `ADMIN_SESSION_SECRET`

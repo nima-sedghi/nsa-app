@@ -1,17 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { api } from "@/lib/api";
-import { normalizeId, isDigitsOnly } from "@/lib/utils";
 
 type Professor = { id: string; name: string; count: number | null };
 type Course = { id: string; name: string; revealed: boolean; myVote: string | null; total: number | null; professors: Professor[] };
 
+const LEADER_TAGS = ["فعلاً داره می‌بره", "نفر اول فعلی", "بیشترین رای تا الان"];
+
 export default function VotePage() {
-  const [studentId, setStudentId] = useState("");
   const [courses, setCourses] = useState<Course[] | null>(null);
-  const [cfg, setCfg] = useState({ mode: "open", minLen: 8, maxLen: 10 });
+  const [peek, setPeek] = useState(false);
   const [toast, setToast] = useState("");
   const [query, setQuery] = useState("");
   const [busyCourseId, setBusyCourseId] = useState<string | null>(null);
@@ -19,61 +18,40 @@ export default function VotePage() {
   const showToast = (msg: string) => setToast(msg);
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(""), 2600);
+    const t = setTimeout(() => setToast(""), 2400);
     return () => clearTimeout(t);
   }, [toast]);
 
-  const loadResults = async (id: string) => {
-    const data = await api.getResults(id);
+  const loadResults = async (p: boolean) => {
+    const data = await api.getResults(p);
     setCourses(data.courses);
   };
 
   useEffect(() => {
-    (async () => {
-      const c = await api.getRosterConfig();
-      setCfg(c);
-      await loadResults("");
-    })();
-  }, []);
-
-  // Re-poll every few seconds so results stay live without a manual refresh.
-  useEffect(() => {
-    const id = normalizeId(studentId);
-    const interval = setInterval(() => {
-      loadResults(id).catch(() => {});
-    }, 6000);
-    return () => clearInterval(interval);
-  }, [studentId]);
-
-  useEffect(() => {
-    loadResults(normalizeId(studentId)).catch(() => {});
+    loadResults(peek).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const nid = normalizeId(studentId);
-  const idStatus = useMemo(() => {
-    if (!studentId.trim()) return null;
-    if (!isDigitsOnly(nid)) return { ok: false, msg: "فقط عدد وارد کن" };
-    if (nid.length < cfg.minLen || nid.length > cfg.maxLen) {
-      return { ok: false, msg: `باید بین ${cfg.minLen} تا ${cfg.maxLen} رقم باشه` };
-    }
-    return { ok: true, msg: "فرمت درسته — اولین رایت خودکار ثبتت می‌کنه ✓" };
-  }, [studentId, cfg]);
+  // Live-ish sync so results feel current without a manual refresh.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadResults(peek).catch(() => {});
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [peek]);
+
+  const togglePeek = async () => {
+    const next = !peek;
+    setPeek(next);
+    await loadResults(next);
+  };
 
   const castVote = async (courseId: string, professorId: string) => {
-    if (!nid) {
-      showToast("اول شماره دانشجویی‌ت رو وارد کن");
-      return;
-    }
-    if (idStatus && !idStatus.ok) {
-      showToast(idStatus.msg);
-      return;
-    }
     setBusyCourseId(courseId);
     try {
-      await api.vote(nid, courseId, professorId);
-      await loadResults(nid);
-      showToast("رای ثبت شد ✌️");
+      await api.vote(courseId, professorId);
+      await loadResults(peek);
+      showToast("ثبت شد ✌️");
     } catch (e: any) {
       showToast(e.message || "یه خطایی پیش اومد");
     } finally {
@@ -98,30 +76,27 @@ export default function VotePage() {
         </div>
       )}
 
-      <header className="border-b border-border px-4 pt-8 pb-6 sm:px-6">
-        <div className="max-w-3xl mx-auto flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="font-mono text-[11px] tracking-widest text-gold mb-2">برگه رسمی نظرسنجی دانشکده</div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold mb-2">نظرسنجی انتخاب استاد</h1>
-            <p className="text-sm text-slate-300 leading-7 max-w-md">
-              برای هر درس، استادی که ترجیح می‌دی رو انتخاب کن. نتایج بعد از رای دادن نشونت داده میشه.
-            </p>
-          </div>
-          <Link
-            href="/admin"
-            className="border border-border text-parchmentlight px-4 py-2 rounded text-sm hover:bg-panel transition"
-          >
-            پنل ادمین
-          </Link>
+      <header className="border-b border-border px-4 pt-8 pb-6 sm:px-6 animate-fadeIn">
+        <div className="max-w-3xl mx-auto">
+          <div className="font-mono text-[11px] tracking-widest text-gold mb-2">نظرسنجی دانشجویی</div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold mb-2">کدوم استاد رو برداریم؟ 🤔</h1>
+          <p className="text-sm text-slate-300 leading-7 max-w-md">
+            رو هر درس بزن رو اسم استادی که می‌خوای. نتیجه رو بعد از رای‌دادن (یا با دکمه‌ی پایین) می‌بینی. رایتم هروقت خواستی می‌تونی عوض کنی.
+          </p>
         </div>
 
         {courses && (
-          <div className="max-w-3xl mx-auto flex gap-3 flex-wrap mt-5">
+          <div className="max-w-3xl mx-auto flex gap-3 flex-wrap mt-5 items-center">
             <StatChip label="تعداد درس" value={courses.length} />
-            <StatChip
-              label="مجموع آرا"
-              value={courses.reduce((s, c) => s + (c.total ?? 0), 0)}
-            />
+            <StatChip label="مجموع آرا" value={courses.reduce((s, c) => s + (c.total ?? 0), 0)} />
+            <button
+              onClick={togglePeek}
+              className={`text-xs px-4 py-2 rounded-full border transition-all active:scale-95 ${
+                peek ? "bg-gold text-inkdark border-gold" : "border-border text-parchmentlight hover:bg-panel"
+              }`}
+            >
+              {peek ? "نتایج نشون داده میشه 👀" : "فقط نتیجه رو نشونم بده"}
+            </button>
           </div>
         )}
         <div
@@ -131,33 +106,14 @@ export default function VotePage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 pt-6">
-        <div className="bg-parchment text-inkdark rounded-md p-4 sm:p-5 mb-4 border border-parchmentborder">
-          <div className="font-mono text-[11px] tracking-wide text-stamp mb-2">هویت رای‌دهنده</div>
-          <input
-            placeholder={`شماره دانشجویی (${cfg.minLen} تا ${cfg.maxLen} رقم)`}
-            value={studentId}
-            onChange={(e) => setStudentId(e.target.value)}
-            inputMode="numeric"
-            className="w-full px-3 py-2.5 rounded border border-parchmentborder bg-parchmentlight text-sm outline-none"
-          />
-          {idStatus && (
-            <div className={`text-xs mt-2 ${idStatus.ok ? "text-good" : "text-stamp"}`}>{idStatus.msg}</div>
-          )}
-          <div className="text-xs text-[#6B6350] mt-2 leading-6">
-            {cfg.mode === "closed"
-              ? "فقط شماره‌هایی که ادمین از قبل تایید کرده می‌تونن رای بدن."
-              : "شماره دانشجویی خودت رو وارد کن، خودکار ثبت میشه. تا رای ندی، درصدها مخفی می‌مونه."}
-          </div>
-        </div>
-
         <input
           placeholder="جست‌وجوی درس یا استاد…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="w-full px-4 py-2.5 rounded-full border border-border bg-panel text-parchmentlight text-sm outline-none mb-5"
+          className="w-full px-4 py-2.5 rounded-full border border-border bg-panel text-parchmentlight text-sm outline-none mb-5 transition focus:border-gold"
         />
 
-        {!courses && <div className="text-center text-slate-400 py-16 text-sm">در حال بارگذاری…</div>}
+        {!courses && <div className="text-center text-slate-400 py-16 text-sm animate-pulse">یه لحظه…</div>}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {courses &&
@@ -173,7 +129,7 @@ export default function VotePage() {
         </div>
 
         {courses && filtered.length === 0 && (
-          <div className="text-center text-slate-400 py-16 text-sm">هیچ درسی با این جست‌وجو پیدا نشد.</div>
+          <div className="text-center text-slate-400 py-16 text-sm">چیزی با این جست‌وجو پیدا نشد.</div>
         )}
       </main>
     </div>
@@ -182,7 +138,7 @@ export default function VotePage() {
 
 function StatChip({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-panel border border-border rounded-md px-4 py-2 min-w-[110px]">
+    <div className="bg-panel border border-border rounded-md px-4 py-2 min-w-[100px] transition hover:border-gold/50">
       <div className="font-mono text-lg font-semibold text-gold">{value}</div>
       <div className="text-[11px] text-slate-400 mt-0.5">{label}</div>
     </div>
@@ -201,18 +157,21 @@ function CourseCard({
   onVote: (profId: string) => void;
 }) {
   const { revealed, myVote } = course;
-  const counts = course.professors.map((p) => p.count ?? 0);
   const total = course.total ?? 0;
-  const maxCount = Math.max(0, ...counts);
+  const maxCount = Math.max(0, ...course.professors.map((p) => p.count ?? 0));
   const leaders = course.professors.filter((p) => (p.count ?? 0) === maxCount && maxCount > 0);
   const isTie = leaders.length > 1;
+  const leaderTag = LEADER_TAGS[idx % LEADER_TAGS.length];
 
   const ordered = revealed
     ? [...course.professors].sort((a, b) => (b.count ?? 0) - (a.count ?? 0))
     : course.professors;
 
   return (
-    <div className="bg-parchment text-inkdark rounded-lg p-4 sm:p-5 border border-parchmentborder relative">
+    <div
+      className="bg-parchment text-inkdark rounded-lg p-4 sm:p-5 border border-parchmentborder relative transition-all hover:shadow-lg hover:shadow-black/20 hover:-translate-y-0.5 animate-fadeInUp"
+      style={{ animationDelay: `${idx * 60}ms` }}
+    >
       <div className="flex justify-between mb-1.5">
         <div className="font-mono text-[11px] text-stamp tracking-wide">#{String(idx + 1).padStart(3, "0")}</div>
         {revealed && <div className="font-mono text-[11px] text-[#6B6350]">{total} رای</div>}
@@ -228,19 +187,19 @@ function CourseCard({
           return (
             <button
               key={p.id}
-              disabled={revealed || busy}
+              disabled={busy}
               onClick={() => onVote(p.id)}
-              className={`relative w-full text-right bg-parchmentlight border-[1.5px] rounded-md px-3 py-2.5 transition ${
-                isMine ? "border-gold" : "border-[#D8CEA8]"
-              } ${revealed ? "cursor-default" : "cursor-pointer hover:border-gold/60"} ${busy ? "opacity-50" : ""}`}
+              className={`relative w-full text-right bg-parchmentlight border-[1.5px] rounded-md px-3 py-2.5 transition-all active:scale-[0.98] ${
+                isMine ? "border-gold" : "border-[#D8CEA8] hover:border-gold/60"
+              } ${busy ? "opacity-50" : ""}`}
             >
               <div className="flex justify-between items-center">
                 <span className="text-sm font-semibold flex items-center gap-1.5">
-                  {isLeader && <span className="text-gold text-xs">★</span>}
+                  {isLeader && <span className="text-gold text-xs animate-softPulse">🔥</span>}
                   {p.name}
                   {isMine && (
-                    <span className="text-[10px] bg-gold text-inkdark px-1.5 py-0.5 rounded-full font-semibold">
-                      رای تو
+                    <span className="text-[10px] bg-gold text-inkdark px-1.5 py-0.5 rounded-full font-semibold animate-popIn">
+                      انتخاب تو
                     </span>
                   )}
                 </span>
@@ -248,12 +207,12 @@ function CourseCard({
               </div>
               {revealed && (
                 <div className="h-1.5 bg-[#E4D8B4] rounded-full overflow-hidden mt-2">
-                  <div className="h-full bg-ink rounded-full animate-fillIn" style={{ width: `${pct}%` }} />
+                  <div className="h-full bg-ink rounded-full animate-fillIn transition-all duration-500" style={{ width: `${pct}%` }} />
                 </div>
               )}
               {isLeader && (
-                <div className="absolute -top-3.5 -right-2.5 w-14 h-14 rounded-full border-2 border-dashed border-stamp text-stamp flex items-center justify-center text-[10px] font-bold text-center -rotate-12 bg-parchmentlight animate-popIn leading-tight p-1">
-                  پیشتاز
+                <div className="absolute -top-3.5 -right-2.5 max-w-[70px] px-1.5 py-1 rounded-full border-2 border-dashed border-stamp text-stamp flex items-center justify-center text-[9px] font-bold text-center -rotate-6 bg-parchmentlight animate-popIn leading-tight">
+                  {leaderTag}
                 </div>
               )}
             </button>
@@ -261,9 +220,16 @@ function CourseCard({
         })}
       </div>
 
-      {!revealed && <div className="text-[11px] text-[#8B7A55] mt-2.5 text-center">درصدها بعد از ثبت رایت نشون داده میشه</div>}
+      {!revealed && (
+        <div className="text-[11px] text-[#8B7A55] mt-2.5 text-center">درصدها بعد از رای دادنت (یا با دکمه‌ی «فقط نتیجه رو نشونم بده») میان</div>
+      )}
       {revealed && isTie && (
-        <div className="text-[11px] text-stamp mt-2.5 text-center">برابری بین {leaders.map((l) => l.name).join(" و ")}</div>
+        <div className="text-[11px] text-stamp mt-2.5 text-center">مساوی شدن {leaders.map((l) => l.name).join(" و ")}</div>
+      )}
+      {myVote && (
+        <div className="text-[10px] text-[#8B7A55] mt-2 text-center">
+          نظرت عوض شد؟ رو یه گزینه‌ی دیگه بزن، رایت خودکار عوض میشه.
+        </div>
       )}
     </div>
   );

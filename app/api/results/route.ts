@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { courses, professors, votes } from "@/lib/db/schema";
-import { normalizeId } from "@/lib/utils";
+import { getVoterId } from "@/lib/voter";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const studentId = normalizeId(searchParams.get("studentId"));
+  const peek = searchParams.get("peek") === "1";
+  const voterId = await getVoterId();
 
   const [allCourses, allProfessors, allVotes] = await Promise.all([
     db.select().from(courses),
@@ -15,13 +16,15 @@ export async function GET(req: Request) {
     db.select().from(votes),
   ]);
 
-  const myVotes = studentId ? allVotes.filter((v) => v.studentId === studentId) : [];
+  const myVotes = allVotes.filter((v) => v.voterId === voterId);
   const votedCourseIds = new Set(myVotes.map((v) => v.courseId));
 
   const result = allCourses.map((course) => {
     const profs = allProfessors.filter((p) => p.courseId === course.id);
     const courseVotes = allVotes.filter((v) => v.courseId === course.id);
-    const revealed = votedCourseIds.has(course.id);
+    // Revealed either because this browser already voted here, or because they
+    // explicitly asked to just see results without voting ("peek" mode).
+    const revealed = peek || votedCourseIds.has(course.id);
     const myVote = myVotes.find((v) => v.courseId === course.id)?.professorId ?? null;
 
     return {

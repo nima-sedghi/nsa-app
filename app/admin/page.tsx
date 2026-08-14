@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import { api } from "@/lib/api";
-import { normalizeId, isDigitsOnly } from "@/lib/utils";
 
 type Professor = { id: string; name: string; count?: number };
 type Course = { id: string; name: string; professors: Professor[]; total?: number };
@@ -83,13 +82,6 @@ export default function AdminPage() {
   const [importBusy, setImportBusy] = useState(false);
   const [importReport, setImportReport] = useState<{ added: number; updated: number; skipped: { course: string; professors: string[] }[] } | null>(null);
 
-  const [rosterMode, setRosterMode] = useState<"open" | "closed">("open");
-  const [minLen, setMinLen] = useState(8);
-  const [maxLen, setMaxLen] = useState(10);
-  const [rosterCount, setRosterCount] = useState(0);
-  const [rosterIds, setRosterIds] = useState<string[]>([]);
-  const [rosterText, setRosterText] = useState("");
-
   const [addProfInputs, setAddProfInputs] = useState<Record<string, string>>({});
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameInputs, setRenameInputs] = useState<Record<string, string>>({});
@@ -114,12 +106,9 @@ export default function AdminPage() {
   }, []);
 
   const refreshAll = async () => {
-    const [res, cfg] = await Promise.all([api.getAdminResults(), api.getRosterConfig()]);
+    const res = await api.getAdminResults();
     setCourses(res.courses);
     setStats(res.stats);
-    setRosterMode(cfg.mode);
-    setMinLen(cfg.minLen);
-    setMaxLen(cfg.maxLen);
   };
 
   useEffect(() => {
@@ -160,7 +149,7 @@ export default function AdminPage() {
       await api.createCourse(name, profs);
       setNewCourseName("");
       setNewProfNames("");
-      showToast("درس اضافه شد");
+      showToast("اضافه شد ✅");
       refreshAll();
     } catch (e: any) {
       showToast(e.message);
@@ -184,7 +173,7 @@ export default function AdminPage() {
     try {
       const res = await api.importCourses(groups);
       setCsvText("");
-      showToast(`${res.added} درس جدید، ${res.updated} درس به‌روزرسانی شد`);
+      showToast(`${res.added} درس جدید، ${res.updated} به‌روزرسانی شد`);
       refreshAll();
     } catch (e: any) {
       showToast(e.message);
@@ -232,18 +221,18 @@ export default function AdminPage() {
       try {
         const res = await api.importCourses(groups);
         setImportReport(res);
-        showToast(`${res.added} درس جدید، ${res.updated} درس به‌روزرسانی شد`);
+        showToast(`${res.added} درس جدید، ${res.updated} به‌روزرسانی شد`);
         refreshAll();
       } catch (err: any) {
         showToast(err.message);
       }
     } else if (anyFailed) {
-      showToast("نتونستم ستون «نام درس» رو تو فایل پیدا کنم");
+      showToast("ستون «نام درس» رو تو فایل پیدا نکردم");
     }
 
     if (leftoverText) {
       setCsvText((prev) => (prev ? prev + "\n" + leftoverText : leftoverText));
-      if (!anyOk) showToast("فایل csv/txt تو کادر پایین ریخته شد، دکمه «وارد کردن» رو بزن");
+      if (!anyOk) showToast("متن فایل تو کادر پایین ریخته شد، دکمه‌ی وارد کردن رو بزن");
     }
 
     setImportBusy(false);
@@ -254,7 +243,7 @@ export default function AdminPage() {
     askConfirm(`درس «${name}» و همه رای‌هاش حذف بشه؟`, async () => {
       try {
         await api.deleteCourse(id);
-        showToast("درس حذف شد");
+        showToast("حذف شد");
         refreshAll();
       } catch (e: any) {
         showToast(e.message);
@@ -266,7 +255,7 @@ export default function AdminPage() {
     askConfirm(`همه آرای درس «${name}» پاک بشه؟`, async () => {
       try {
         await api.clearCourseVotes(id);
-        showToast("آرای این درس پاک شد");
+        showToast("آرا پاک شد");
         refreshAll();
       } catch (e: any) {
         showToast(e.message);
@@ -295,7 +284,7 @@ export default function AdminPage() {
     askConfirm(`استاد «${profName}» از این درس حذف بشه؟ آرای این استاد هم پاک میشه.`, async () => {
       try {
         await api.removeProfessor(courseId, profId);
-        showToast("استاد حذف شد");
+        showToast("حذف شد");
         refreshAll();
       } catch (e: any) {
         showToast(e.message);
@@ -313,7 +302,7 @@ export default function AdminPage() {
     try {
       await api.renameCourse(id, name);
       setRenamingId(null);
-      showToast("نام درس تغییر کرد");
+      showToast("اسم عوض شد");
       refreshAll();
     } catch (e: any) {
       showToast(e.message);
@@ -331,69 +320,8 @@ export default function AdminPage() {
     downloadCSV(course.name + "-نتایج.csv", rows);
   };
 
-  const saveRosterConfig = async (mode: "open" | "closed", min: number, max: number) => {
-    setRosterMode(mode);
-    setMinLen(min);
-    setMaxLen(max);
-    try {
-      await api.setRosterConfig(mode, min, max);
-    } catch (e: any) {
-      showToast(e.message);
-    }
-  };
-
-  const loadRosterList = async () => {
-    try {
-      const r = await api.getRoster();
-      setRosterIds(r.ids);
-      setRosterCount(r.count);
-    } catch (e: any) {
-      showToast(e.message);
-    }
-  };
-  useEffect(() => {
-    if (authed) loadRosterList();
-  }, [authed]);
-
-  const importRoster = async () => {
-    const raw = rosterText.split(/[\n,]/).map((s) => normalizeId(s)).filter(Boolean);
-    const ids = Array.from(new Set(raw)).filter(isDigitsOnly);
-    if (ids.length === 0) {
-      showToast("لیست خالیه یا فرمتش درست نیست");
-      return;
-    }
-    try {
-      const res = await api.addRosterIds(ids);
-      setRosterText("");
-      showToast(`${res.added} شماره دانشجویی اضافه شد`);
-      loadRosterList();
-    } catch (e: any) {
-      showToast(e.message);
-    }
-  };
-  const onRosterFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setRosterText(await file.text());
-    e.target.value = "";
-  };
-  const clearRosterList = () => {
-    askConfirm("لیست شماره‌های ثبت‌شده پاک بشه؟ رای‌ها دست‌نخورده می‌مونن.", async () => {
-      try {
-        await api.clearRoster();
-        showToast("لیست ثبت‌نامی‌ها پاک شد");
-        loadRosterList();
-      } catch (e: any) {
-        showToast(e.message);
-      }
-    });
-  };
-  const exportRoster = () => {
-    downloadCSV("لیست-ثبت-نامی-ها.csv", [["شماره دانشجویی"], ...rosterIds.map((id) => [id])]);
-  };
-
   if (checking) {
-    return <div className="min-h-screen flex items-center justify-center text-slate-300 text-sm font-mono">در حال بررسی…</div>;
+    return <div className="min-h-screen flex items-center justify-center text-slate-300 text-sm font-mono animate-pulse">یه لحظه…</div>;
   }
 
   return (
@@ -406,14 +334,17 @@ export default function AdminPage() {
 
       {pendingConfirm && (
         <div
-          className="fixed inset-0 bg-inkdark/70 z-[100] flex items-center justify-center p-5"
+          className="fixed inset-0 bg-inkdark/70 z-[100] flex items-center justify-center p-5 animate-fadeIn"
           onClick={() => setPendingConfirm(null)}
         >
-          <div className="bg-parchment text-inkdark rounded-lg p-5 max-w-sm border border-parchmentborder" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="bg-parchment text-inkdark rounded-lg p-5 max-w-sm border border-parchmentborder animate-fadeInUp"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="text-sm leading-7 mb-4">{pendingConfirm.message}</div>
             <div className="flex gap-2.5">
               <button
-                className="border border-stamp text-stamp px-3 py-1.5 rounded text-xs"
+                className="border border-stamp text-stamp px-3 py-1.5 rounded text-xs transition hover:bg-stamp hover:text-parchmentlight"
                 onClick={() => {
                   const fn = pendingConfirm.onConfirm;
                   setPendingConfirm(null);
@@ -451,7 +382,7 @@ export default function AdminPage() {
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 pt-6">
         {!authed ? (
-          <div className="bg-parchment text-inkdark rounded-lg p-6 max-w-sm border border-parchmentborder">
+          <div className="bg-parchment text-inkdark rounded-lg p-6 max-w-sm border border-parchmentborder animate-fadeInUp">
             <div className="font-mono text-[11px] tracking-wide text-stamp mb-2.5">ورود ادمین</div>
             <input
               type="password"
@@ -462,89 +393,19 @@ export default function AdminPage() {
               className="w-full px-3 py-2.5 rounded border border-parchmentborder bg-parchmentlight text-sm outline-none"
             />
             {loginErr && <div className="text-stamp text-xs mt-2">{loginErr}</div>}
-            <button onClick={login} className="mt-3 bg-ink text-parchmentlight px-4 py-2 rounded text-sm font-semibold">
+            <button onClick={login} className="mt-3 bg-ink text-parchmentlight px-4 py-2 rounded text-sm font-semibold transition hover:opacity-90 active:scale-95">
               ورود
             </button>
-            <div className="text-xs text-[#6B6350] mt-3 leading-6">
-              رمز سمت سرور چک میشه و هیچ‌جا تو کد فرانت نیست — برخلاف نسخه‌ی قبلی.
-            </div>
           </div>
         ) : (
           <div className="flex flex-col gap-5">
-            <div className="flex gap-3 flex-wrap">
+            <div className="flex gap-3 flex-wrap animate-fadeInUp">
               <StatChip label="تعداد درس" value={stats.totalCourses} />
               <StatChip label="مجموع آرا" value={stats.totalVotes} />
               <StatChip label="دانشجویان شرکت‌کننده" value={stats.totalVoters} />
             </div>
 
-            {/* Roster / auth */}
-            <section className="bg-parchment text-inkdark rounded-lg p-5 border border-parchmentborder">
-              <h3 className="font-bold text-[15px] mb-3">احراز هویت رای‌دهنده‌ها</h3>
-              <div className="flex flex-col gap-2 mb-3.5 text-sm">
-                <label className="flex items-center gap-2">
-                  <input type="radio" checked={rosterMode === "open"} onChange={() => saveRosterConfig("open", minLen, maxLen)} />
-                  ثبت‌نام خودکار — هر شماره‌ای با فرمت درست خودش رو ثبت می‌کنه
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="radio" checked={rosterMode === "closed"} onChange={() => saveRosterConfig("closed", minLen, maxLen)} />
-                  لیست بسته — فقط شماره‌هایی که خودم اضافه می‌کنم
-                </label>
-              </div>
-              <div className="flex gap-5 mb-3 text-xs text-[#6B6350]">
-                <label>
-                  حداقل رقم
-                  <input
-                    type="number"
-                    value={minLen}
-                    onChange={(e) => saveRosterConfig(rosterMode, Number(e.target.value) || 1, maxLen)}
-                    className="w-14 mx-2 px-1.5 py-1 rounded border border-parchmentborder bg-parchmentlight text-inkdark text-xs"
-                  />
-                </label>
-                <label>
-                  حداکثر رقم
-                  <input
-                    type="number"
-                    value={maxLen}
-                    onChange={(e) => saveRosterConfig(rosterMode, minLen, Number(e.target.value) || 1)}
-                    className="w-14 mx-2 px-1.5 py-1 rounded border border-parchmentborder bg-parchmentlight text-inkdark text-xs"
-                  />
-                </label>
-              </div>
-              <p className="text-xs text-[#6B6350] mb-2 leading-6">
-                {rosterMode === "closed"
-                  ? "شماره دانشجویی‌ها رو اینجا اضافه کن، یک شماره در هر خط یا با ویرگول جدا شده."
-                  : "می‌تونی از قبل چندتا شماره رو دستی اضافه کنی، ولی لازم نیست."}
-              </p>
-              <input type="file" accept=".csv,.txt" onChange={onRosterFileUpload} className="block text-xs mb-2" />
-              <textarea
-                placeholder={"مثلا:\n40012345\n40012346"}
-                value={rosterText}
-                onChange={(e) => setRosterText(e.target.value)}
-                rows={3}
-                className="w-full px-3 py-2 rounded border border-parchmentborder bg-parchmentlight text-xs font-mono outline-none resize-y"
-              />
-              <button onClick={importRoster} className="mt-2 bg-ink text-parchmentlight px-4 py-2 rounded text-sm font-semibold">
-                اضافه کردن به لیست
-              </button>
-              <div className="flex justify-between items-center mt-3.5 flex-wrap gap-2">
-                <span className="text-xs text-[#6B6350]">{rosterCount} شماره دانشجویی ثبت‌شده</span>
-                <div className="flex gap-2">
-                  {rosterCount > 0 && (
-                    <button onClick={exportRoster} className="border border-parchmentborder px-2.5 py-1.5 rounded text-xs">
-                      خروجی لیست
-                    </button>
-                  )}
-                  {rosterCount > 0 && (
-                    <button onClick={clearRosterList} className="border border-stamp text-stamp px-2.5 py-1.5 rounded text-xs">
-                      پاک کردن لیست
-                    </button>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            {/* Manual course add */}
-            <section className="bg-parchment text-inkdark rounded-lg p-5 border border-parchmentborder">
+            <section className="bg-parchment text-inkdark rounded-lg p-5 border border-parchmentborder animate-fadeInUp">
               <h3 className="font-bold text-[15px] mb-3">افزودن دستی درس</h3>
               <input
                 placeholder="نام درس (مثلا ریاضی عمومی)"
@@ -558,23 +419,22 @@ export default function AdminPage() {
                 onChange={(e) => setNewProfNames(e.target.value)}
                 className="w-full mt-2.5 px-3 py-2.5 rounded border border-parchmentborder bg-parchmentlight text-sm outline-none"
               />
-              <button onClick={addManualCourse} className="mt-3 bg-ink text-parchmentlight px-4 py-2 rounded text-sm font-semibold">
+              <button onClick={addManualCourse} className="mt-3 bg-ink text-parchmentlight px-4 py-2 rounded text-sm font-semibold transition hover:opacity-90 active:scale-95">
                 اضافه کردن درس
               </button>
             </section>
 
-            {/* File import */}
-            <section className="bg-parchment text-inkdark rounded-lg p-5 border border-parchmentborder">
+            <section className="bg-parchment text-inkdark rounded-lg p-5 border border-parchmentborder animate-fadeInUp">
               <h3 className="font-bold text-[15px] mb-3">وارد کردن دروس از فایل</h3>
               <p className="text-xs text-[#6B6350] mb-2.5 leading-6">
-                فایل خام خروجی آموزشیار (.xlsx) رو همینجوری که هست بده — خودش ستون «نام درس» و «استاد» رو پیدا می‌کنه. می‌تونی چندتا فایل با هم انتخاب کنی.
+                فایل خام خروجی آموزشیار (.xlsx) رو همینجوری که هست بده — خودش ستون «نام درس» و «استاد» رو پیدا می‌کنه. چندتا فایل با هم هم اوکیه.
               </p>
               <input type="file" accept=".xlsx,.xls,.csv,.txt" multiple onChange={onCourseFilesUpload} disabled={importBusy} className="block text-xs mb-2" />
-              {importBusy && <div className="text-xs text-[#6B6350]">در حال پردازش فایل…</div>}
+              {importBusy && <div className="text-xs text-[#6B6350] animate-pulse">در حال پردازش…</div>}
               {importReport && (
-                <div className="bg-parchmentlight border border-[#D8CEA8] rounded p-3 mt-2 text-xs">
+                <div className="bg-parchmentlight border border-[#D8CEA8] rounded p-3 mt-2 text-xs animate-fadeIn">
                   <div className="font-semibold mb-1.5">
-                    {importReport.added} درس جدید اضافه شد، {importReport.updated} درس به‌روزرسانی شد
+                    {importReport.added} درس جدید، {importReport.updated} به‌روزرسانی شد
                   </div>
                   {importReport.skipped.length > 0 && (
                     <details>
@@ -597,13 +457,12 @@ export default function AdminPage() {
                 rows={3}
                 className="w-full px-3 py-2 rounded border border-parchmentborder bg-parchmentlight text-xs font-mono outline-none resize-y"
               />
-              <button onClick={importCSVText} className="mt-2 bg-ink text-parchmentlight px-4 py-2 rounded text-sm font-semibold">
+              <button onClick={importCSVText} className="mt-2 bg-ink text-parchmentlight px-4 py-2 rounded text-sm font-semibold transition hover:opacity-90 active:scale-95">
                 وارد کردن از متن بالا
               </button>
             </section>
 
-            {/* Manage existing courses */}
-            <section className="bg-parchment text-inkdark rounded-lg p-5 border border-parchmentborder">
+            <section className="bg-parchment text-inkdark rounded-lg p-5 border border-parchmentborder animate-fadeInUp">
               <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
                 <h3 className="font-bold text-[15px]">مدیریت درس‌های موجود</h3>
                 <input
@@ -644,7 +503,7 @@ export default function AdminPage() {
                             {p.name} <span className="text-[10px] text-[#6B6350] font-mono">({p.count ?? 0})</span>
                             <button
                               onClick={() => removeProfessorFrom(c.id, p.id, p.name, c.professors.length)}
-                              className="bg-[#E4D8B4] rounded-full w-4 h-4 text-[11px] text-stamp leading-none"
+                              className="bg-[#E4D8B4] rounded-full w-4 h-4 text-[11px] text-stamp leading-none transition hover:bg-stamp hover:text-parchmentlight"
                             >
                               ×
                             </button>
@@ -689,7 +548,7 @@ export default function AdminPage() {
 
 function StatChip({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-panel border border-border rounded-md px-4 py-2 min-w-[110px]">
+    <div className="bg-panel border border-border rounded-md px-4 py-2 min-w-[110px] transition hover:border-gold/50">
       <div className="font-mono text-lg font-semibold text-gold">{value}</div>
       <div className="text-[11px] text-slate-400 mt-0.5">{label}</div>
     </div>

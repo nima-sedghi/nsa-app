@@ -33,7 +33,7 @@ export async function GET() {
   const stats = {
     totalCourses: allCourses.length,
     totalVotes: allVotes.length,
-    totalVoters: new Set(allVotes.map((v) => v.studentId)).size,
+    totalVoters: new Set(allVotes.map((v) => v.voterId)).size,
   };
 
   return NextResponse.json({ courses: result, stats });
