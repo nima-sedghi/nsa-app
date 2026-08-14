@@ -131,6 +131,20 @@ export default function VotePage() {
         {courses && filtered.length === 0 && (
           <div className="text-center text-slate-400 py-16 text-sm">چیزی با این جست‌وجو پیدا نشد.</div>
         )}
+
+        <footer className="mt-12 pt-6 border-t border-border/60 text-center animate-fadeIn">
+          <p className="text-[11px] text-slate-500">
+            طراحی و توسعه:{" "}
+            <a
+              href="https://github.com/nima-sedghi"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gold hover:underline"
+            >
+              نیما صدقی
+            </a>
+          </p>
+        </footer>
       </main>
     </div>
   );

@@ -24,6 +24,7 @@ export const api = {
     request(`/api/courses/${courseId}/professors/${profId}`, { method: "DELETE" }),
   importCourses: (groups: { name: string; professors: string[] }[]) =>
     request("/api/courses/import", { method: "POST", body: JSON.stringify({ groups }) }),
+  resetAllVotes: () => request("/api/admin/reset-votes", { method: "DELETE" }),
 
   vote: (courseId: string, professorId: string) =>
     request("/api/vote", { method: "POST", body: JSON.stringify({ courseId, professorId }) }),

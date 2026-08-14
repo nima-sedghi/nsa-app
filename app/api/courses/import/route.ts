@@ -18,6 +18,12 @@ const Schema = z.object({
     .max(500),
 });
 
+// Collapses repeated/odd whitespace so "ریاضی  عمومی" and "ریاضی عمومی" match as the
+// same course across two different exports, instead of creating a duplicate.
+function normalizeCourseName(s: string): string {
+  return s.trim().replace(/\s+/g, " ");
+}
+
 export async function POST(req: Request) {
   const denied = await requireAdmin();
   if (denied) return denied;
@@ -32,6 +38,11 @@ export async function POST(req: Request) {
   let added = 0;
   let updated = 0;
   const skipped: { course: string; professors: string[] }[] = [];
+  // Professors currently on a course that the new file didn't mention for that same
+  // course name — probably means they're not teaching it this term. We only report
+  // this, never auto-delete: an incomplete or partial file shouldn't silently wipe
+  // someone off the list. The admin reviews and removes manually if it's correct.
+  const possiblyStale: { course: string; professors: string[] }[] = [];
 
   for (const g of parsed.data.groups) {
     const uniqueProfs = Array.from(new Set(g.professors));
@@ -39,21 +50,29 @@ export async function POST(req: Request) {
       skipped.push({ course: g.name, professors: uniqueProfs });
       continue;
     }
-    const existing = existingCourses.find((c) => c.name.trim() === g.name.trim());
+    const existing = existingCourses.find((c) => normalizeCourseName(c.name) === normalizeCourseName(g.name));
     if (!existing) {
       const cid = crypto.randomUUID();
       await db.insert(courses).values({ id: cid, name: g.name });
       await db.insert(professors).values(uniqueProfs.map((name) => ({ id: crypto.randomUUID(), courseId: cid, name })));
       added += 1;
     } else {
-      const currentNames = new Set(existingProfs.filter((p) => p.courseId === existing.id).map((p) => p.name));
+      const currentProfNames = existingProfs.filter((p) => p.courseId === existing.id).map((p) => p.name);
+      const currentNames = new Set(currentProfNames);
+      const newFileNames = new Set(uniqueProfs);
+
       const newOnes = uniqueProfs.filter((n) => !currentNames.has(n));
       if (newOnes.length > 0) {
         await db.insert(professors).values(newOnes.map((name) => ({ id: crypto.randomUUID(), courseId: existing.id, name })));
         updated += 1;
       }
+
+      const stale = currentProfNames.filter((n) => !newFileNames.has(n));
+      if (stale.length > 0) {
+        possiblyStale.push({ course: g.name, professors: stale });
+      }
     }
   }
 
-  return NextResponse.json({ added, updated, skipped });
+  return NextResponse.json({ added, updated, skipped, possiblyStale });
 }

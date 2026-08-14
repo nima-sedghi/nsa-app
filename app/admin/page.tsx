@@ -80,7 +80,12 @@ export default function AdminPage() {
   const [newProfNames, setNewProfNames] = useState("");
   const [csvText, setCsvText] = useState("");
   const [importBusy, setImportBusy] = useState(false);
-  const [importReport, setImportReport] = useState<{ added: number; updated: number; skipped: { course: string; professors: string[] }[] } | null>(null);
+  const [importReport, setImportReport] = useState<{
+    added: number;
+    updated: number;
+    skipped: { course: string; professors: string[] }[];
+    possiblyStale: { course: string; professors: string[] }[];
+  } | null>(null);
 
   const [addProfInputs, setAddProfInputs] = useState<Record<string, string>>({});
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -263,6 +268,21 @@ export default function AdminPage() {
     });
   };
 
+  const resetAllVotes = () => {
+    askConfirm(
+      "همه‌ی آرای همه‌ی درس‌ها پاک بشه؟ خودِ درس‌ها و استادا دست‌نخورده می‌مونن، فقط رای‌ها صفر میشه — برای شروع یه ترم جدید.",
+      async () => {
+        try {
+          await api.resetAllVotes();
+          showToast("ترم جدید شروع شد، همه‌ی آرا صفر شدن");
+          refreshAll();
+        } catch (e: any) {
+          showToast(e.message);
+        }
+      }
+    );
+  };
+
   const addProfessorTo = async (courseId: string) => {
     const name = (addProfInputs[courseId] || "").trim();
     if (!name) return;
@@ -399,10 +419,16 @@ export default function AdminPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-5">
-            <div className="flex gap-3 flex-wrap animate-fadeInUp">
+            <div className="flex gap-3 flex-wrap items-center animate-fadeInUp">
               <StatChip label="تعداد درس" value={stats.totalCourses} />
               <StatChip label="مجموع آرا" value={stats.totalVotes} />
               <StatChip label="دانشجویان شرکت‌کننده" value={stats.totalVoters} />
+              <button
+                onClick={resetAllVotes}
+                className="text-xs px-4 py-2 rounded-full border border-stamp text-stamp transition hover:bg-stamp hover:text-parchmentlight active:scale-95"
+              >
+                شروع ترم جدید (صفر کردن همه‌ی آرا)
+              </button>
             </div>
 
             <section className="bg-parchment text-inkdark rounded-lg p-5 border border-parchmentborder animate-fadeInUp">
@@ -437,12 +463,29 @@ export default function AdminPage() {
                     {importReport.added} درس جدید، {importReport.updated} به‌روزرسانی شد
                   </div>
                   {importReport.skipped.length > 0 && (
-                    <details>
+                    <details className="mb-2">
                       <summary className="cursor-pointer">{importReport.skipped.length} درس رد شد (فقط یک استاد داشتن)</summary>
                       <ul className="mt-2 pr-4 text-[11px] text-[#6B6350] leading-7 list-disc">
                         {importReport.skipped.map((s, i) => (
                           <li key={i}>
                             {s.course} — {s.professors.join("، ")}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                  {importReport.possiblyStale.length > 0 && (
+                    <details open>
+                      <summary className="cursor-pointer text-stamp font-semibold">
+                        ⚠️ {importReport.possiblyStale.length} درس — استادایی که تو فایل جدید نبودن
+                      </summary>
+                      <p className="text-[11px] text-[#6B6350] mt-2 mb-2 leading-6">
+                        اینا از قبل تو سیستم بودن ولی تو فایلی که الان دادی، دیگه اسمشون نیومده. شاید دیگه این درس رو ارائه نمیدن — اگه درسته، از بخش «مدیریت درس‌های موجود» پایین‌تر دستی حذفشون کن. خودکار پاک نکردمشون چون ممکنه فایلت ناقص بوده باشه.
+                      </p>
+                      <ul className="pr-4 text-[11px] text-[#6B6350] leading-7 list-disc">
+                        {importReport.possiblyStale.map((s, i) => (
+                          <li key={i}>
+                            <span className="font-semibold">{s.course}</span> — {s.professors.join("، ")}
                           </li>
                         ))}
                       </ul>
