@@ -133,15 +133,25 @@ export default function VotePage() {
         )}
 
         <footer className="mt-12 pt-6 border-t border-border/60 text-center animate-fadeIn">
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-slate-500 leading-6">
             طراحی و توسعه:{" "}
             <a
               href="https://github.com/nima-sedghi"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-gold hover:underline"
+              className="text-gold hover:underline font-medium"
             >
               نیما صدقی
+            </a>{" "}
+            — دانشجوی مهندسی کامپیوتر
+            <br />
+            <a
+              href="https://github.com/nima-sedghi/nsa-app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-slate-500 hover:text-gold hover:underline"
+            >
+              کد این سایت رو اینجا ببین ↗
             </a>
           </p>
         </footer>
