@@ -5,7 +5,7 @@
 ## استک
 
 - **Next.js 15** (App Router) — فرانت + API روی یه پروژه
-- **Postgres** (پیشنهاد: [Neon](https://neon.tech), رایگان) با **Drizzle ORM**
+- **Postgres** ([Neon](https://neon.tech), رایگان) با **Drizzle ORM**
 - **bcrypt + JWT** برای سشن ادمین (سمت سرور، نه تو کد فرانت)
 - **Tailwind CSS** — موبایل‌فرست، راست‌به‌چپ
 
@@ -23,14 +23,10 @@
 
 ```bash
 npm install
-cp .env.example .env   # پرش کن
-npm run db:push        # جدول‌ها رو می‌سازه
+cp .env.example .env
+npm run db:push
 npm run dev
 ```
-
-## دیپلوی
-
-راهنمای کامل تو [`DEPLOY.md`](./DEPLOY.md).
 
 ## ساختار پروژه
 
